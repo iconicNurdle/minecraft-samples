@@ -1,0 +1,112 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: write
+      deployments: none
+      packages: none
+      pull-requests: none
+      security-events: none
+      checks: none
+      id-token: none
+      issues: none
+      repository-projects: none
+      statuses: none
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Bump version
+        id: version
+        uses: vemel/nextversion@0.1.1
+        with:
+          path: ./addon_starter/complete/package.json
+          type: semver
+          result: ${{ github.event.inputs.bump }}
+          release: ${{ github.event.inputs.release }}
+          update: |
+            ./addon_starter/complete/package.json
+            ./addon_starter/complete/README.md
+
+      - name: Build
+        env:
+          CI: ""
+        run: |
+          pushd "addon_starter/complete"
+          npm ci
+          npm run mcaddon
+          popd
+          pushd "casual_creator/chill_dreams/complete"
+          npm ci
+          npm run mcaddon
+          popd
+          pushd "casual_creator/gray_wave"
+          npm ci
+          npm run mcaddon
+          popd
+
+      - name: Get Package Version
+        id: get-package-version
+        with:
+          path: addon_starter/complete/
+        uses: stevenbenitez/get-package-version-action@v1
+            
+      - name: Create draft Minecraft Samples release
+        id: create_samples_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get-package-version.outputs.version }}-alpha
+          release_name: Minecraft Samples
+          draft: true
+          prerelease: true
+          
+      - name: Upload aop_mobsbp_complete_v.mcaddon to node_module release
+        id: upload_aop_mobsbp_complete_v
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_samples_release.outputs.upload_url }}
+          asset_path: ./addon_starter/complete/dist/packages/aop_mobs.mcaddon
+          asset_name: addon_starter_complete_v${{ steps.get-package-version.outputs.version }}.mcaddon
+          asset_content_type: application/zip
+          
+      - name: Upload chill_dreams_complete_v.mcaddon to node_module release
+        id: chill_dreams_complete_v
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_samples_release.outputs.upload_url }}
+          asset_path: ./casual_creator/chill_dreams/complete/dist/packages/mamm_cds.mcaddon
+          asset_name: chill_dreams_complete_v${{ steps.get-package-version.outputs.version }}.mcaddon
+          asset_content_type: application/zip
+                  
+      - name: Upload gray_wave_v.mcaddon to node_module release
+        id: gray_wave_v
+        uses: actions/upload-release-asset@v1.0.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_samples_release.outputs.upload_url }}
+          asset_path: ./casual_creator/gray_wave/dist/packages/mikeamm_gwve.mcaddon
+          asset_name: gray_wave_v${{ steps.get-package-version.outputs.version }}.mcaddon
+          asset_content_type: application/zip
+          
+      - name: Commit version changes
+        run: |
+          VERSION=${{ toJSON(steps.version.outputs.result) }}
+          BRANCH="main"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git commit -am "Bump version to $VERSION"
+          git push origin $BRANCH          
